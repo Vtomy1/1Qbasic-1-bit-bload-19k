@@ -2,9 +2,12 @@ import React, { useRef, useState } from 'react';
 import { Upload, Image as ImageIcon, Sparkles, Check } from 'lucide-react';
 import { SAMPLE_IMAGES, SampleImage } from '../utils/sampleImages';
 import { ScalingMode } from '../types';
+import { Archive } from 'lucide-react';
 
 interface ImageUploaderProps {
   onImageSelected: (img: HTMLImageElement, name: string) => void;
+  onMultipleImagesSelected?: (files: File[]) => void;
+  onOpenBatchTab?: () => void;
   selectedSampleId: string;
   scalingMode: ScalingMode;
   onScalingModeChange: (mode: ScalingMode) => void;
@@ -12,6 +15,8 @@ interface ImageUploaderProps {
 
 export const ImageUploader: React.FC<ImageUploaderProps> = ({
   onImageSelected,
+  onMultipleImagesSelected,
+  onOpenBatchTab,
   selectedSampleId,
   scalingMode,
   onScalingModeChange,
@@ -37,8 +42,11 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0]);
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+    if (files.length > 1 && onMultipleImagesSelected) {
+      onMultipleImagesSelected(files);
+    } else if (files.length === 1) {
+      handleFile(files[0]);
     }
   };
 
@@ -82,11 +90,16 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           accept="image/*"
           className="hidden"
           onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              handleFile(e.target.files[0]);
+            if (e.target.files && e.target.files.length > 0) {
+              if (e.target.files.length > 1 && onMultipleImagesSelected) {
+                onMultipleImagesSelected(Array.from(e.target.files));
+              } else {
+                handleFile(e.target.files[0]);
+              }
             }
           }}
         />
@@ -100,15 +113,29 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               {customFileName ? (
                 <span className="text-amber-400">{customFileName}</span>
               ) : (
-                'Drop an image here or click to browse'
+                'Drop image(s) here or click to browse'
               )}
             </p>
             <p className="text-xs text-neutral-500 mt-0.5">
-              PNG, JPG, WebP, GIF, or BMP · Automatically converted to 640x480 1-bit
+              Select one or multiple files at once to convert and export as ZIP
             </p>
           </div>
         </div>
       </div>
+
+      {/* Batch Shortcut Banner */}
+      {onOpenBatchTab && (
+        <button
+          onClick={onOpenBatchTab}
+          className="w-full flex items-center justify-between p-2.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/15 transition-colors text-xs font-medium"
+        >
+          <div className="flex items-center gap-2">
+            <Archive className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Multi-Image Batch to ZIP Mode</span>
+          </div>
+          <span className="text-[11px] underline">Open Batch Queue →</span>
+        </button>
+      )}
 
       {/* Preset Gallery */}
       <div>

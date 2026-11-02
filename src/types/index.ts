@@ -39,6 +39,12 @@ export interface ImageProcessingOptions {
   scaling: ScalingMode;
 }
 
+export interface ComparisonConfig {
+  enabled: boolean;
+  algorithmB: DitherAlgorithm;
+  splitPosition: number; // 10 to 90 percent (default 50)
+}
+
 export interface BsaveHeaderInfo {
   magicByte: number; // 0xFD = 253
   segment: number; // 0xA000 (40960)
@@ -57,4 +63,17 @@ export interface ConversionResult {
   blackPixels: number;
   whitePercent: number;
   processingTimeMs: number;
+}
+
+export interface BatchItem {
+  id: string;
+  file: File;
+  name: string;
+  bsvFilename: string;
+  originalWidth: number;
+  originalHeight: number;
+  status: 'pending' | 'processing' | 'ready' | 'error';
+  result?: ConversionResult;
+  thumbnailUrl?: string;
+  errorMessage?: string;
 }

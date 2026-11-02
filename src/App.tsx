@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { ImageUploader } from './components/ImageUploader';
-import { DitherControls } from './components/DitherControls';
+import { DitherControls, ALGORITHMS } from './components/DitherControls';
 import { CRTPreview } from './components/CRTPreview';
 import { BsaveInspector } from './components/BsaveInspector';
 import { CodeViewer } from './components/CodeViewer';
 import { VgaArchitectureGuide } from './components/VgaArchitectureGuide';
 import { PaletteExportView } from './components/PaletteExportView';
+import { BatchConvertView } from './components/BatchConvertView';
 import {
+  BatchItem,
+  ComparisonConfig,
   ConversionResult,
   DisplayMode,
   ImageProcessingOptions,
@@ -16,16 +19,18 @@ import {
 } from './types';
 import { convertTo1Bit, renderImageToCanvas } from './utils/dithering';
 import { downloadBinaryFile } from './utils/bsave';
+import { sanitizeDosFilename, processBatchImageFile } from './utils/batchZip';
 import { SAMPLE_IMAGES } from './utils/sampleImages';
-import { Monitor, Binary, FileCode, Layers, Sliders, Check, Palette } from 'lucide-react';
+import { Monitor, Binary, FileCode, Layers, Sliders, Check, Palette, Archive } from 'lucide-react';
 
 export default function App() {
   const [activeImage, setActiveImage] = useState<HTMLImageElement | null>(null);
   const [imageName, setImageName] = useState<string>('VINTAGE_PC');
   const [selectedSampleId, setSelectedSampleId] = useState<string>('retro_pc');
   const [activeTab, setActiveTab] = useState<
-    'crt' | 'palette-export' | 'header-inspector' | 'code-suite' | 'vga-docs'
+    'crt' | 'batch-zip' | 'palette-export' | 'header-inspector' | 'code-suite' | 'vga-docs'
   >('crt');
+  const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
 
   const [options, setOptions] = useState<ImageProcessingOptions>({
     algorithm: 'atkinson',
@@ -37,7 +42,14 @@ export default function App() {
     scaling: 'fit',
   });
 
+  const [comparison, setComparison] = useState<ComparisonConfig>({
+    enabled: false,
+    algorithmB: 'floyd-steinberg',
+    splitPosition: 50,
+  });
+
   const [conversionResult, setConversionResult] = useState<ConversionResult | null>(null);
+  const [comparisonResult, setComparisonResult] = useState<ConversionResult | null>(null);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('screen11');
   const [phosphorType, setPhosphorType] = useState<PhosphorType>('amber');
   const [screen12FgColor, setScreen12FgColor] = useState<number>(15);
@@ -58,18 +70,29 @@ export default function App() {
     }
   }, []);
 
-  // Re-run 1-bit conversion whenever activeImage or options change
+  // Re-run 1-bit conversion whenever activeImage, options, or comparison change
   useEffect(() => {
     if (!activeImage) return;
 
     try {
       const imageData = renderImageToCanvas(activeImage, options.scaling);
-      const result = convertTo1Bit(imageData, options);
-      setConversionResult(result);
+      const resultA = convertTo1Bit(imageData, options);
+      setConversionResult(resultA);
+
+      if (comparison.enabled) {
+        const optionsB: ImageProcessingOptions = {
+          ...options,
+          algorithm: comparison.algorithmB,
+        };
+        const resultB = convertTo1Bit(imageData, optionsB);
+        setComparisonResult(resultB);
+      } else {
+        setComparisonResult(null);
+      }
     } catch (err) {
       console.error('Error during 1-bit conversion:', err);
     }
-  }, [activeImage, options]);
+  }, [activeImage, options, comparison]);
 
   const handleImageSelected = useCallback((img: HTMLImageElement, name: string) => {
     setActiveImage(img);
@@ -88,11 +111,71 @@ export default function App() {
     setTimeout(() => setDownloadSuccessNotice(false), 3000);
   }, [conversionResult, imageName]);
 
+  const handleBatchAddFiles = async (files: File[]) => {
+    setActiveTab('batch-zip');
+    const existingNames = new Set(batchItems.map((i) => i.bsvFilename));
+    const newItems: BatchItem[] = files.map((file, idx) => ({
+      id: `${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+      file,
+      name: file.name,
+      bsvFilename: sanitizeDosFilename(file.name, existingNames),
+      originalWidth: 0,
+      originalHeight: 0,
+      status: 'pending',
+    }));
+
+    const combined = [...batchItems, ...newItems];
+    setBatchItems(combined);
+
+    for (const item of newItems) {
+      setBatchItems((prev) =>
+        prev.map((it) => (it.id === item.id ? { ...it, status: 'processing' } : it))
+      );
+      try {
+        const resultData = await processBatchImageFile(item.file, options);
+        setBatchItems((prev) =>
+          prev.map((it) =>
+            it.id === item.id
+              ? {
+                  ...it,
+                  originalWidth: resultData.originalWidth,
+                  originalHeight: resultData.originalHeight,
+                  result: resultData.result,
+                  thumbnailUrl: resultData.thumbnailUrl,
+                  status: 'ready',
+                }
+              : it
+          )
+        );
+      } catch (err: any) {
+        setBatchItems((prev) =>
+          prev.map((it) =>
+            it.id === item.id
+              ? { ...it, status: 'error', errorMessage: err?.message || 'Failed' }
+              : it
+          )
+        );
+      }
+    }
+  };
+
+  const handlePreviewBatchItemInCrt = (item: BatchItem) => {
+    if (item.result) {
+      setConversionResult(item.result);
+      setImageName(item.bsvFilename.replace(/\.BSV$/i, ''));
+      const img = new Image();
+      img.onload = () => setActiveImage(img);
+      img.src = URL.createObjectURL(item.file);
+      setActiveTab('crt');
+    }
+  };
+
   const scrollToSection = (sectionId: string) => {
     if (sectionId === 'converter') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (
       sectionId === 'crt' ||
+      sectionId === 'batch-zip' ||
       sectionId === 'palette-export' ||
       sectionId === 'header-inspector' ||
       sectionId === 'code-suite' ||
@@ -113,6 +196,7 @@ export default function App() {
         onDownloadBsave={handleDownloadBsave}
         onNavigateSection={scrollToSection}
         activeSection={activeTab}
+        batchCount={batchItems.length}
       />
 
       {/* Main Workspace */}
@@ -171,6 +255,8 @@ export default function App() {
                 </h2>
                 <ImageUploader
                   onImageSelected={handleImageSelected}
+                  onMultipleImagesSelected={handleBatchAddFiles}
+                  onOpenBatchTab={() => setActiveTab('batch-zip')}
                   selectedSampleId={selectedSampleId}
                   scalingMode={options.scaling}
                   onScalingModeChange={handleScalingModeChange}
@@ -183,7 +269,12 @@ export default function App() {
                   <span className="w-2 h-2 rounded-full bg-amber-400" />
                   <span>2. 1-Bit Dithering &amp; Luma Engine</span>
                 </h2>
-                <DitherControls options={options} onChange={setOptions} />
+                <DitherControls
+                  options={options}
+                  onChange={setOptions}
+                  comparison={comparison}
+                  onComparisonChange={setComparison}
+                />
               </div>
             </div>
           </div>
@@ -202,6 +293,23 @@ export default function App() {
               >
                 <Monitor className="w-3.5 h-3.5" />
                 <span>CRT Simulator</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('batch-zip')}
+                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap ${
+                  activeTab === 'batch-zip'
+                    ? 'bg-neutral-800 text-amber-400 shadow-sm'
+                    : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <Archive className="w-3.5 h-3.5" />
+                <span>Batch to ZIP</span>
+                {batchItems.length > 0 && (
+                  <span className="px-1.5 py-0.2 text-[10px] rounded bg-amber-400/20 text-amber-300 font-mono">
+                    {batchItems.length}
+                  </span>
+                )}
               </button>
 
               <button
@@ -267,6 +375,18 @@ export default function App() {
             {activeTab === 'crt' && (
               <CRTPreview
                 conversionResult={conversionResult}
+                comparisonResult={comparisonResult}
+                comparison={comparison}
+                onSplitPositionChange={(pos) =>
+                  setComparison((prev) => ({ ...prev, splitPosition: pos }))
+                }
+                algoAName={
+                  ALGORITHMS.find((a) => a.id === options.algorithm)?.name || options.algorithm
+                }
+                algoBName={
+                  ALGORITHMS.find((a) => a.id === comparison.algorithmB)?.name ||
+                  comparison.algorithmB
+                }
                 displayMode={displayMode}
                 onDisplayModeChange={setDisplayMode}
                 phosphorType={phosphorType}
@@ -276,6 +396,15 @@ export default function App() {
                 screen12BgColor={screen12BgColor}
                 onScreen12BgColorChange={setScreen12BgColor}
                 onOpenPaletteExport={() => setActiveTab('palette-export')}
+              />
+            )}
+
+            {activeTab === 'batch-zip' && (
+              <BatchConvertView
+                batchItems={batchItems}
+                onBatchItemsChange={setBatchItems}
+                options={options}
+                onPreviewInCrt={handlePreviewBatchItemInCrt}
               />
             )}
 

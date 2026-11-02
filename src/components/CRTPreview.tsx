@@ -1,10 +1,15 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { ConversionResult, DisplayMode, PhosphorType } from '../types';
+import { ConversionResult, DisplayMode, PhosphorType, ComparisonConfig } from '../types';
 import { PHOSPHOR_PROFILES, VGA_16_COLORS } from '../utils/vgaColors';
-import { Monitor, Eye, Download, Maximize2, Sparkles } from 'lucide-react';
+import { Monitor, Eye, Download, Maximize2, Sparkles, Columns2 } from 'lucide-react';
 
 interface CRTPreviewProps {
   conversionResult: ConversionResult | null;
+  comparisonResult?: ConversionResult | null;
+  comparison?: ComparisonConfig;
+  onSplitPositionChange?: (pos: number) => void;
+  algoAName?: string;
+  algoBName?: string;
   displayMode: DisplayMode;
   onDisplayModeChange: (mode: DisplayMode) => void;
   phosphorType: PhosphorType;
@@ -18,6 +23,11 @@ interface CRTPreviewProps {
 
 export const CRTPreview: React.FC<CRTPreviewProps> = ({
   conversionResult,
+  comparisonResult,
+  comparison,
+  onSplitPositionChange,
+  algoAName = 'Side A',
+  algoBName = 'Side B',
   displayMode,
   onDisplayModeChange,
   phosphorType,
@@ -32,9 +42,9 @@ export const CRTPreview: React.FC<CRTPreviewProps> = ({
   const [enableScanlines, setEnableScanlines] = useState(true);
   const [enableCurvature, setEnableCurvature] = useState(true);
   const [enableGlow, setEnableGlow] = useState(true);
-  const [zoomLevel, setZoomLevel] = useState<'fit' | '1x' | '1.5x'>('fit');
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
 
-  // Render to canvas whenever conversionResult or color selections change
+  // Render to canvas whenever conversionResult, comparisonResult, or color selections change
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !conversionResult) return;
@@ -62,25 +72,72 @@ export const CRTPreview: React.FC<CRTPreviewProps> = ({
       bgRgb = bgColor.rgb;
     }
 
-    const total = width * height;
-    for (let i = 0; i < total; i++) {
-      const isPixelSet = pixelData[i] === 1;
-      const rgb = isPixelSet ? fgRgb : bgRgb;
-      const ptr = i * 4;
-      data[ptr] = rgb[0];
-      data[ptr + 1] = rgb[1];
-      data[ptr + 2] = rgb[2];
-      data[ptr + 3] = 255;
+    const isComparing = Boolean(comparison?.enabled && comparisonResult);
+    const splitX = isComparing
+      ? Math.round(((comparison?.splitPosition ?? 50) / 100) * width)
+      : width;
+
+    for (let y = 0; y < height; y++) {
+      const rowOffset = y * width;
+      for (let x = 0; x < width; x++) {
+        const idx = rowOffset + x;
+        const ptr = idx * 4;
+
+        if (isComparing && (x === splitX || x === splitX - 1)) {
+          // Subtle amber divider line between comparisons
+          data[ptr] = 251;
+          data[ptr + 1] = 191;
+          data[ptr + 2] = 36;
+          data[ptr + 3] = 255;
+        } else {
+          const isPixelSet =
+            isComparing && x >= splitX
+              ? comparisonResult!.pixelData[idx] === 1
+              : pixelData[idx] === 1;
+
+          const rgb = isPixelSet ? fgRgb : bgRgb;
+          data[ptr] = rgb[0];
+          data[ptr + 1] = rgb[1];
+          data[ptr + 2] = rgb[2];
+          data[ptr + 3] = 255;
+        }
+      }
     }
 
     ctx.putImageData(imgData, 0, 0);
   }, [
     conversionResult,
+    comparisonResult,
+    comparison,
     displayMode,
     phosphorType,
     screen12FgColor,
     screen12BgColor,
   ]);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!comparison?.enabled || !onSplitPositionChange) return;
+    setIsDraggingSplit(true);
+    updateSplit(e);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (isDraggingSplit && onSplitPositionChange) {
+      updateSplit(e);
+    }
+  };
+
+  const handlePointerUp = () => {
+    setIsDraggingSplit(false);
+  };
+
+  const updateSplit = (e: React.PointerEvent) => {
+    if (!canvasRef.current || !onSplitPositionChange) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const relativeX = e.clientX - rect.left;
+    const pct = Math.max(10, Math.min(90, Math.round((relativeX / rect.width) * 100)));
+    onSplitPositionChange(pct);
+  };
 
   const handleDownloadPng = () => {
     const canvas = canvasRef.current;
@@ -249,7 +306,15 @@ export const CRTPreview: React.FC<CRTPreviewProps> = ({
           }`}
         >
           {/* Inner Screen Bezel */}
-          <div className="relative rounded-lg overflow-hidden border-2 border-neutral-950/80 bg-black">
+          <div
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className={`relative rounded-lg overflow-hidden border-2 border-neutral-950/80 bg-black select-none ${
+              comparison?.enabled ? 'cursor-col-resize' : ''
+            }`}
+          >
             {/* The Canvas */}
             <canvas
               ref={canvasRef}
@@ -274,9 +339,35 @@ export const CRTPreview: React.FC<CRTPreviewProps> = ({
             )}
 
             {/* Retro OSD Tag (Screen mode indicator) */}
-            <div className="pointer-events-none absolute top-3 left-3 z-30 font-mono text-[10px] text-amber-400/90 bg-neutral-950/75 border border-amber-500/30 px-2 py-0.5 rounded shadow">
-              {displayMode === 'screen11' ? 'VGA MODE 11h · 640x480 MONO' : `VGA MODE 12h · 640x480 COLOR ${screen12FgColor}`}
+            <div className="pointer-events-none absolute top-3 left-3 z-30 font-mono text-[10px] text-amber-400/90 bg-neutral-950/85 border border-amber-500/30 px-2 py-0.5 rounded shadow flex items-center gap-1.5">
+              <span>{displayMode === 'screen11' ? 'MODE 11h' : `MODE 12h`}</span>
+              {comparison?.enabled && (
+                <>
+                  <span>·</span>
+                  <span className="text-amber-300 font-bold">A: {algoAName}</span>
+                </>
+              )}
             </div>
+
+            {/* Comparison Right OSD Tag */}
+            {comparison?.enabled && (
+              <div className="pointer-events-none absolute top-3 right-3 z-30 font-mono text-[10px] text-blue-300 bg-neutral-950/85 border border-blue-500/30 px-2 py-0.5 rounded shadow">
+                B: {algoBName}
+              </div>
+            )}
+
+            {/* Draggable Divider Grip on Screen */}
+            {comparison?.enabled && (
+              <div
+                className="absolute top-0 bottom-0 pointer-events-none z-30 flex items-center justify-center"
+                style={{ left: `${comparison.splitPosition}%`, transform: 'translateX(-50%)' }}
+              >
+                <div className="px-1.5 py-1 rounded bg-amber-400 text-neutral-950 font-mono font-bold text-[9px] shadow-lg flex items-center gap-0.5 opacity-90">
+                  <span>◀</span>
+                  <span>▶</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* CRT Monitor Bottom Chin Badge */}
@@ -296,32 +387,63 @@ export const CRTPreview: React.FC<CRTPreviewProps> = ({
       {conversionResult && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
           <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
-            <span className="text-[11px] text-neutral-400 block">Resolution & Depth</span>
+            <span className="text-[11px] text-neutral-400 block">Resolution & Mode</span>
             <span className="font-mono tabular-nums text-neutral-200 font-semibold mt-0.5 block">
-              640 × 480 · 1-bit
+              640 × 480 · {comparison?.enabled ? 'Split Compare' : '1-bit'}
             </span>
           </div>
 
-          <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
-            <span className="text-[11px] text-neutral-400 block">Scanline Buffer</span>
-            <span className="font-mono tabular-nums text-neutral-200 font-semibold mt-0.5 block">
-              80 Bytes / Scanline
-            </span>
-          </div>
+          {comparison?.enabled && comparisonResult ? (
+            <>
+              <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
+                <span className="text-[11px] text-amber-400 block truncate">
+                  Side A ({algoAName})
+                </span>
+                <span className="font-mono tabular-nums text-neutral-200 font-semibold mt-0.5 block">
+                  {conversionResult.whitePercent.toFixed(1)}% ({conversionResult.whitePixels.toLocaleString()} px)
+                </span>
+              </div>
 
-          <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
-            <span className="text-[11px] text-neutral-400 block">BSAVE File Size</span>
-            <span className="font-mono tabular-nums text-amber-400 font-semibold mt-0.5 block">
-              38,407 Bytes (Exact)
-            </span>
-          </div>
+              <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
+                <span className="text-[11px] text-blue-400 block truncate">
+                  Side B ({algoBName})
+                </span>
+                <span className="font-mono tabular-nums text-neutral-200 font-semibold mt-0.5 block">
+                  {comparisonResult.whitePercent.toFixed(1)}% ({comparisonResult.whitePixels.toLocaleString()} px)
+                </span>
+              </div>
 
-          <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
-            <span className="text-[11px] text-neutral-400 block">Active Pixel Fill</span>
-            <span className="font-mono tabular-nums text-neutral-200 font-semibold mt-0.5 block">
-              {conversionResult.whitePercent.toFixed(1)}% ({conversionResult.whitePixels.toLocaleString()} px)
-            </span>
-          </div>
+              <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
+                <span className="text-[11px] text-neutral-400 block">Difference</span>
+                <span className="font-mono tabular-nums text-amber-400 font-semibold mt-0.5 block">
+                  {Math.abs(conversionResult.whitePercent - comparisonResult.whitePercent).toFixed(1)}% Delta
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
+                <span className="text-[11px] text-neutral-400 block">Scanline Buffer</span>
+                <span className="font-mono tabular-nums text-neutral-200 font-semibold mt-0.5 block">
+                  80 Bytes / Scanline
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
+                <span className="text-[11px] text-neutral-400 block">BSAVE File Size</span>
+                <span className="font-mono tabular-nums text-amber-400 font-semibold mt-0.5 block">
+                  38,407 Bytes (Exact)
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded bg-neutral-900 border border-neutral-800">
+                <span className="text-[11px] text-neutral-400 block">Active Pixel Fill</span>
+                <span className="font-mono tabular-nums text-neutral-200 font-semibold mt-0.5 block">
+                  {conversionResult.whitePercent.toFixed(1)}% ({conversionResult.whitePixels.toLocaleString()} px)
+                </span>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

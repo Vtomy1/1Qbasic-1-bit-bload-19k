@@ -5,12 +5,14 @@ interface HeaderProps {
   onDownloadBsave: () => void;
   onNavigateSection: (sectionId: string) => void;
   activeSection: string;
+  batchCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onDownloadBsave,
   onNavigateSection,
   activeSection,
+  batchCount = 0,
 }) => {
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between gap-8 px-6 py-3.5 bg-neutral-950/90 backdrop-blur-md border-b border-neutral-800">
@@ -41,6 +43,19 @@ export const Header: React.FC<HeaderProps> = ({
           }`}
         >
           CRT Simulator
+        </button>
+        <button
+          onClick={() => onNavigateSection('batch-zip')}
+          className={`hover:text-neutral-100 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+            activeSection === 'batch-zip' ? 'text-amber-400 font-semibold' : ''
+          }`}
+        >
+          <span>Batch ZIP</span>
+          {batchCount > 0 && (
+            <span className="px-1.5 py-0.2 text-[10px] rounded bg-amber-400/20 text-amber-300 font-mono">
+              {batchCount}
+            </span>
+          )}
         </button>
         <button
           onClick={() => onNavigateSection('palette-export')}

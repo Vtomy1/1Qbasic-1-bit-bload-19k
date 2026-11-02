@@ -1,6 +1,6 @@
 {
   "name": "QBasic 1-Bit 640x480 BSAVE Studio",
-  "description": "Image to 1-bit 640x480 dithered bitmap converter, BSAVE binary generator, CRT emulator, VGA palette exporter (.BAS), and QBasic loader/saver code samples for SCREEN 11 and SCREEN 12 displays.",
+  "description": "Image to 1-bit 640x480 dithered bitmap converter, multi-image batch to ZIP archive exporter, BSAVE binary generator, CRT emulator, VGA palette exporter (.BAS), and QBasic loader/saver code samples for SCREEN 11 and SCREEN 12.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
