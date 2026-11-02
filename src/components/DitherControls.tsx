@@ -1,6 +1,6 @@
 import React from 'react';
 import { DitherAlgorithm, ImageProcessingOptions, ComparisonConfig } from '../types';
-import { Sliders, RotateCcw, Sparkles, Columns2, ArrowLeftRight } from 'lucide-react';
+import { Sliders, RotateCcw, Sparkles, Columns2, ArrowLeftRight, Check, Info } from 'lucide-react';
 
 interface DitherControlsProps {
   options: ImageProcessingOptions;
@@ -85,6 +85,101 @@ export const ALGORITHMS: AlgorithmInfo[] = [
   },
 ];
 
+export interface DitheringPreset {
+  id: string;
+  name: string;
+  subject: string;
+  description: string;
+  algorithm: DitherAlgorithm;
+  brightness: number;
+  contrast: number;
+  threshold: number;
+  gamma: number;
+  invert: boolean;
+  tag: string;
+}
+
+export const DITHERING_PRESETS: DitheringPreset[] = [
+  {
+    id: 'line-art',
+    name: 'Line Art',
+    subject: 'Schematics, Ink & Line Art',
+    description: 'Crisp binary thresholding with boosted contrast to eliminate paper noise and keep vector-like black/white lines razor sharp.',
+    algorithm: 'threshold',
+    brightness: 12,
+    contrast: 55,
+    threshold: 140,
+    gamma: 1.0,
+    invert: false,
+    tag: 'Crisp Cutoff',
+  },
+  {
+    id: 'photographic',
+    name: 'Photographic',
+    subject: 'Portraits & Natural Scenery',
+    description: 'Floyd-Steinberg error diffusion with subtle gamma lift to retain smooth facial gradations, skin tones, and organic textures.',
+    algorithm: 'floyd-steinberg',
+    brightness: 4,
+    contrast: 10,
+    threshold: 128,
+    gamma: 1.05,
+    invert: false,
+    tag: 'Smooth Midtones',
+  },
+  {
+    id: 'high-contrast-graphics',
+    name: 'High Contrast Graphics',
+    subject: 'Logos, Sprites & Typography',
+    description: 'Atkinson 3/4 error diffusion combined with punchy contrast for iconic 1984 MacPaint-style silhouettes and sharp graphics.',
+    algorithm: 'atkinson',
+    brightness: 6,
+    contrast: 34,
+    threshold: 130,
+    gamma: 1.0,
+    invert: false,
+    tag: '1984 MacPaint',
+  },
+  {
+    id: 'retro-halftone',
+    name: 'Retro Halftone',
+    subject: 'Newsprint & Screen Prints',
+    description: 'Geometric matrix screen with boosted contrast for vintage comic book, newspaper, and industrial print aesthetics.',
+    algorithm: 'halftone',
+    brightness: 2,
+    contrast: 26,
+    threshold: 128,
+    gamma: 1.0,
+    invert: false,
+    tag: 'Dot Screen',
+  },
+  {
+    id: 'architectural',
+    name: 'Architectural & Textures',
+    subject: 'Masonry, CAD & Complex Foliage',
+    description: 'Sierra 3-row diffusion with slight gamma compress to capture micro-details without clumping or worm artifacts.',
+    algorithm: 'sierra-3',
+    brightness: -2,
+    contrast: 18,
+    threshold: 126,
+    gamma: 0.95,
+    invert: false,
+    tag: 'Micro-Detail',
+  },
+  {
+    id: 'low-light',
+    name: 'Low-Light Recovery',
+    subject: 'Night Photography & Shadows',
+    description: 'Burkes diffusion with aggressive brightness boost and high gamma curve to extract hidden shadow information into 1-bit space.',
+    algorithm: 'burkes',
+    brightness: 22,
+    contrast: 18,
+    threshold: 112,
+    gamma: 1.35,
+    invert: false,
+    tag: 'Shadow Lift',
+  },
+];
+
 export const DitherControls: React.FC<DitherControlsProps> = ({
   options,
   onChange,
@@ -137,65 +232,39 @@ export const DitherControls: React.FC<DitherControlsProps> = ({
     onChange({ ...options, invert: !options.invert });
   };
 
-  const applyPreset = (preset: 'atkinson' | 'floyd' | 'bayer' | 'lineart' | 'reset') => {
-    switch (preset) {
-      case 'atkinson':
-        onChange({
-          ...options,
-          algorithm: 'atkinson',
-          threshold: 128,
-          brightness: 5,
-          contrast: 15,
-          gamma: 1.1,
-          invert: false,
-        });
-        break;
-      case 'floyd':
-        onChange({
-          ...options,
-          algorithm: 'floyd-steinberg',
-          threshold: 128,
-          brightness: 0,
-          contrast: 10,
-          gamma: 1.0,
-          invert: false,
-        });
-        break;
-      case 'bayer':
-        onChange({
-          ...options,
-          algorithm: 'bayer-8',
-          threshold: 128,
-          brightness: 0,
-          contrast: 20,
-          gamma: 1.0,
-          invert: false,
-        });
-        break;
-      case 'lineart':
-        onChange({
-          ...options,
-          algorithm: 'threshold',
-          threshold: 140,
-          brightness: 10,
-          contrast: 50,
-          gamma: 1.0,
-          invert: false,
-        });
-        break;
-      case 'reset':
-        onChange({
-          ...options,
-          algorithm: 'floyd-steinberg',
-          threshold: 128,
-          brightness: 0,
-          contrast: 0,
-          gamma: 1.0,
-          invert: false,
-        });
-        break;
-    }
+  const handleApplyPreset = (preset: DitheringPreset) => {
+    onChange({
+      ...options,
+      algorithm: preset.algorithm,
+      brightness: preset.brightness,
+      contrast: preset.contrast,
+      threshold: preset.threshold,
+      gamma: preset.gamma,
+      invert: preset.invert,
+    });
   };
+
+  const handleResetDefaults = () => {
+    onChange({
+      ...options,
+      algorithm: 'floyd-steinberg',
+      threshold: 128,
+      brightness: 0,
+      contrast: 0,
+      gamma: 1.0,
+      invert: false,
+    });
+  };
+
+  const activePreset = DITHERING_PRESETS.find(
+    (p) =>
+      p.algorithm === options.algorithm &&
+      p.brightness === options.brightness &&
+      p.contrast === options.contrast &&
+      p.threshold === options.threshold &&
+      Math.abs(p.gamma - options.gamma) < 0.01 &&
+      p.invert === options.invert
+  );
 
   const currentAlgoA = ALGORITHMS.find((a) => a.id === options.algorithm) || ALGORITHMS[0];
   const currentAlgoB =
@@ -336,45 +405,98 @@ export const DitherControls: React.FC<DitherControlsProps> = ({
         )}
       </div>
 
-      {/* Quick Presets */}
-      <div className="flex items-center justify-between pb-1 border-b border-neutral-800">
-        <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-          Quick Dithering Presets
-        </span>
-        <button
-          onClick={() => applyPreset('reset')}
-          className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-amber-400 transition-colors"
-        >
-          <RotateCcw className="w-3 h-3" />
-          <span>Reset Defaults</span>
-        </button>
-      </div>
+      {/* Dithering Presets */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between pb-1 border-b border-neutral-800">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-300">
+              Dithering Presets
+            </span>
+          </div>
+          <button
+            onClick={handleResetDefaults}
+            className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-amber-400 transition-colors cursor-pointer"
+            title="Reset algorithm, brightness, contrast, and gamma to default neutral baseline"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>Reset Defaults</span>
+          </button>
+        </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          onClick={() => applyPreset('atkinson')}
-          className="px-2.5 py-1 text-xs font-medium rounded bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-amber-400 hover:border-neutral-700 transition-colors"
-        >
-          Atkinson (MacPaint)
-        </button>
-        <button
-          onClick={() => applyPreset('floyd')}
-          className="px-2.5 py-1 text-xs font-medium rounded bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-amber-400 hover:border-neutral-700 transition-colors"
-        >
-          Floyd-Steinberg Classic
-        </button>
-        <button
-          onClick={() => applyPreset('bayer')}
-          className="px-2.5 py-1 text-xs font-medium rounded bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-amber-400 hover:border-neutral-700 transition-colors"
-        >
-          Bayer 8x8 Crosshatch
-        </button>
-        <button
-          onClick={() => applyPreset('lineart')}
-          className="px-2.5 py-1 text-xs font-medium rounded bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-amber-400 hover:border-neutral-700 transition-colors"
-        >
-          High-Contrast Line Art
-        </button>
+        {/* Preset Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {DITHERING_PRESETS.map((preset) => {
+            const isActive = activePreset?.id === preset.id;
+            return (
+              <button
+                key={preset.id}
+                onClick={() => handleApplyPreset(preset)}
+                className={`flex flex-col text-left p-2.5 rounded-lg border transition-all text-xs cursor-pointer ${
+                  isActive
+                    ? 'bg-amber-500/15 border-amber-500/80 text-amber-100 ring-1 ring-amber-500/40 shadow-sm'
+                    : 'bg-neutral-900/60 border-neutral-800 text-neutral-300 hover:bg-neutral-800/80 hover:border-neutral-700'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="font-semibold text-neutral-100 flex items-center gap-1.5">
+                    {preset.name}
+                  </span>
+                  {isActive ? (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                      <Check className="w-3 h-3" />
+                      Active
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-neutral-400 font-mono">
+                      {preset.tag}
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-neutral-400 leading-tight mb-2">
+                  {preset.subject}
+                </div>
+
+                <div className="mt-auto pt-1.5 border-t border-neutral-800/60 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-neutral-400">
+                  <span>
+                    Algo: <strong className="text-neutral-200">{preset.algorithm}</strong>
+                  </span>
+                  <span>
+                    Bright: <strong className="text-neutral-200">{preset.brightness > 0 ? `+${preset.brightness}` : preset.brightness}%</strong>
+                  </span>
+                  <span>
+                    Contrast: <strong className="text-neutral-200">{preset.contrast > 0 ? `+${preset.contrast}` : preset.contrast}%</strong>
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active Preset Context Callout */}
+        {activePreset ? (
+          <div className="p-2.5 rounded bg-neutral-900/80 border border-neutral-800 text-[11px] text-neutral-300 flex items-start gap-2">
+            <Info className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <span className="text-amber-400 font-semibold">{activePreset.name}:</span>{' '}
+              {activePreset.description}{' '}
+              <span className="text-neutral-400 block sm:inline">
+                (You can further fine-tune the calibration sliders below).
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="px-2.5 py-1.5 rounded bg-neutral-900/40 border border-neutral-800/70 text-[11px] text-neutral-400 flex items-center justify-between">
+            <span>Custom calibration active (manual adjustments).</span>
+            <button
+              onClick={handleResetDefaults}
+              className="text-amber-400 hover:underline text-[10px] cursor-pointer"
+            >
+              Reset to baseline
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Algorithm Selector */}
