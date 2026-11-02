@@ -6,6 +6,7 @@ import { CRTPreview } from './components/CRTPreview';
 import { BsaveInspector } from './components/BsaveInspector';
 import { CodeViewer } from './components/CodeViewer';
 import { VgaArchitectureGuide } from './components/VgaArchitectureGuide';
+import { PaletteExportView } from './components/PaletteExportView';
 import {
   ConversionResult,
   DisplayMode,
@@ -16,13 +17,15 @@ import {
 import { convertTo1Bit, renderImageToCanvas } from './utils/dithering';
 import { downloadBinaryFile } from './utils/bsave';
 import { SAMPLE_IMAGES } from './utils/sampleImages';
-import { Monitor, Binary, FileCode, Layers, Sliders, Check } from 'lucide-react';
+import { Monitor, Binary, FileCode, Layers, Sliders, Check, Palette } from 'lucide-react';
 
 export default function App() {
   const [activeImage, setActiveImage] = useState<HTMLImageElement | null>(null);
   const [imageName, setImageName] = useState<string>('VINTAGE_PC');
   const [selectedSampleId, setSelectedSampleId] = useState<string>('retro_pc');
-  const [activeTab, setActiveTab] = useState<'crt' | 'header-inspector' | 'code-suite' | 'vga-docs'>('crt');
+  const [activeTab, setActiveTab] = useState<
+    'crt' | 'palette-export' | 'header-inspector' | 'code-suite' | 'vga-docs'
+  >('crt');
 
   const [options, setOptions] = useState<ImageProcessingOptions>({
     algorithm: 'atkinson',
@@ -90,6 +93,7 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (
       sectionId === 'crt' ||
+      sectionId === 'palette-export' ||
       sectionId === 'header-inspector' ||
       sectionId === 'code-suite' ||
       sectionId === 'vga-docs'
@@ -197,7 +201,19 @@ export default function App() {
                 }`}
               >
                 <Monitor className="w-3.5 h-3.5" />
-                <span>CRT Display Simulator</span>
+                <span>CRT Simulator</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('palette-export')}
+                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap ${
+                  activeTab === 'palette-export'
+                    ? 'bg-neutral-800 text-amber-400 shadow-sm'
+                    : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                <Palette className="w-3.5 h-3.5" />
+                <span>Palette Export (.BAS)</span>
               </button>
 
               <button
@@ -259,6 +275,17 @@ export default function App() {
                 onScreen12FgColorChange={setScreen12FgColor}
                 screen12BgColor={screen12BgColor}
                 onScreen12BgColorChange={setScreen12BgColor}
+                onOpenPaletteExport={() => setActiveTab('palette-export')}
+              />
+            )}
+
+            {activeTab === 'palette-export' && (
+              <PaletteExportView
+                fgIndex={screen12FgColor}
+                bgIndex={screen12BgColor}
+                onFgIndexChange={setScreen12FgColor}
+                onBgIndexChange={setScreen12BgColor}
+                bsvFileName={`${imageName}.BSV`}
               />
             )}
 

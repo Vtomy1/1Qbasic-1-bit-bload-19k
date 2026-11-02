@@ -13,6 +13,7 @@ interface CRTPreviewProps {
   onScreen12FgColorChange: (index: number) => void;
   screen12BgColor: number;
   onScreen12BgColorChange: (index: number) => void;
+  onOpenPaletteExport?: () => void;
 }
 
 export const CRTPreview: React.FC<CRTPreviewProps> = ({
@@ -25,6 +26,7 @@ export const CRTPreview: React.FC<CRTPreviewProps> = ({
   onScreen12FgColorChange,
   screen12BgColor,
   onScreen12BgColorChange,
+  onOpenPaletteExport,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [enableScanlines, setEnableScanlines] = useState(true);
@@ -91,6 +93,7 @@ export const CRTPreview: React.FC<CRTPreviewProps> = ({
 
   const currentPhosphor = PHOSPHOR_PROFILES[phosphorType];
   const currentVgaFg = VGA_16_COLORS[screen12FgColor] || VGA_16_COLORS[15];
+  const currentVgaBg = VGA_16_COLORS[screen12BgColor] || VGA_16_COLORS[0];
 
   return (
     <div className="flex flex-col h-full space-y-3">
@@ -150,8 +153,13 @@ export const CRTPreview: React.FC<CRTPreviewProps> = ({
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-neutral-400">Foreground Color:</span>
+            {/* FG Color */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-neutral-400">FG:</span>
+              <div
+                className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
+                style={{ backgroundColor: currentVgaFg.hex }}
+              />
               <select
                 value={screen12FgColor}
                 onChange={(e) => onScreen12FgColorChange(parseInt(e.target.value))}
@@ -159,17 +167,42 @@ export const CRTPreview: React.FC<CRTPreviewProps> = ({
               >
                 {VGA_16_COLORS.map((c) => (
                   <option key={c.index} value={c.index}>
-                    Color {c.index}: {c.name.split(': ')[1]}
+                    {c.index}: {c.name.split(': ')[1]}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-neutral-400">
-              <span>VGA Map Mask:</span>
-              <code className="text-amber-400 font-mono font-semibold">
-                &amp;H{currentVgaFg.planeMask.toString(16).toUpperCase().padStart(2, '0')}
-              </code>
+
+            {/* BG Color */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-neutral-400">BG:</span>
+              <div
+                className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
+                style={{ backgroundColor: currentVgaBg.hex }}
+              />
+              <select
+                value={screen12BgColor}
+                onChange={(e) => onScreen12BgColorChange(parseInt(e.target.value))}
+                className="text-xs bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-neutral-200 focus:outline-none focus:border-amber-400"
+              >
+                {VGA_16_COLORS.map((c) => (
+                  <option key={c.index} value={c.index}>
+                    {c.index}: {c.name.split(': ')[1]}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {/* Palette Export CTA Button */}
+            {onOpenPaletteExport && (
+              <button
+                onClick={onOpenPaletteExport}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-amber-400/20 text-amber-300 border border-amber-500/40 hover:bg-amber-400/30 transition-colors"
+                title="Generate QBasic PALETTE.BAS code for this color pair"
+              >
+                <span>Export Palette (.BAS)</span>
+              </button>
+            )}
           </div>
         )}
 

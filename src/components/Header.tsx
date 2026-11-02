@@ -25,7 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Zone 2: Navigation Links (single line, clean hover) */}
-      <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-neutral-400">
+      <nav className="hidden md:flex items-center gap-5 text-sm font-medium text-neutral-400">
         <button
           onClick={() => onNavigateSection('converter')}
           className={`hover:text-neutral-100 transition-colors whitespace-nowrap shrink-0 ${
@@ -43,12 +43,20 @@ export const Header: React.FC<HeaderProps> = ({
           CRT Simulator
         </button>
         <button
+          onClick={() => onNavigateSection('palette-export')}
+          className={`hover:text-neutral-100 transition-colors whitespace-nowrap shrink-0 ${
+            activeSection === 'palette-export' ? 'text-amber-400 font-semibold' : ''
+          }`}
+        >
+          Palette Export
+        </button>
+        <button
           onClick={() => onNavigateSection('header-inspector')}
           className={`hover:text-neutral-100 transition-colors whitespace-nowrap shrink-0 ${
             activeSection === 'header-inspector' ? 'text-amber-400 font-semibold' : ''
           }`}
         >
-          BSAVE Hex Inspector
+          BSAVE Hex
         </button>
         <button
           onClick={() => onNavigateSection('code-suite')}
@@ -56,15 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
             activeSection === 'code-suite' ? 'text-amber-400 font-semibold' : ''
           }`}
         >
-          QBasic Code Samples
-        </button>
-        <button
-          onClick={() => onNavigateSection('vga-docs')}
-          className={`hover:text-neutral-100 transition-colors whitespace-nowrap shrink-0 ${
-            activeSection === 'vga-docs' ? 'text-amber-400 font-semibold' : ''
-          }`}
-        >
-          VGA Architecture
+          Code Samples
         </button>
       </nav>
 
