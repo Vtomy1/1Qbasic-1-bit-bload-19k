@@ -1,6 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { DitherAlgorithm, ImageProcessingOptions, ComparisonConfig } from '../types';
-import { Sliders, RotateCcw, Sparkles, Columns2, ArrowLeftRight, Check, Info } from 'lucide-react';
+import {
+  Sliders,
+  RotateCcw,
+  Sparkles,
+  Columns2,
+  ArrowLeftRight,
+  Check,
+  Info,
+  BookmarkPlus,
+  Bookmark,
+  Trash2,
+  X,
+} from 'lucide-react';
 
 interface DitherControlsProps {
   options: ImageProcessingOptions;
@@ -98,6 +110,48 @@ export interface DitheringPreset {
   invert: boolean;
   tag: string;
 }
+
+export interface CustomDitherPreset {
+  id: string;
+  name: string;
+  subject: string;
+  description?: string;
+  createdAt: number;
+  algorithm: DitherAlgorithm;
+  brightness: number;
+  contrast: number;
+  threshold: number;
+  gamma: number;
+  invert: boolean;
+  tag?: string;
+}
+
+export const LOCAL_STORAGE_CUSTOM_PRESETS_KEY = 'qbasic_bsave_custom_presets';
+
+export const loadCustomPresets = (): CustomDitherPreset[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_CUSTOM_PRESETS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    return [];
+  } catch (e) {
+    console.error('Failed to load custom dithering presets from localStorage', e);
+    return [];
+  }
+};
+
+export const saveCustomPresetsToStorage = (presets: CustomDitherPreset[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LOCAL_STORAGE_CUSTOM_PRESETS_KEY, JSON.stringify(presets));
+  } catch (e) {
+    console.error('Failed to save custom dithering presets to localStorage', e);
+  }
+};
 
 export const DITHERING_PRESETS: DitheringPreset[] = [
   {
@@ -232,7 +286,49 @@ export const DitherControls: React.FC<DitherControlsProps> = ({
     onChange({ ...options, invert: !options.invert });
   };
 
-  const handleApplyPreset = (preset: DitheringPreset) => {
+  const [customPresets, setCustomPresets] = useState<CustomDitherPreset[]>(() => loadCustomPresets());
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [newPresetSubject, setNewPresetSubject] = useState('');
+
+  const handleSaveCustomPreset = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newPresetName.trim()) return;
+    const newPreset: CustomDitherPreset = {
+      id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: newPresetName.trim(),
+      subject: newPresetSubject.trim() || `${options.algorithm} custom tuning`,
+      description: `Custom preset with ${options.algorithm}, brightness ${options.brightness > 0 ? `+${options.brightness}` : options.brightness}%, contrast ${options.contrast > 0 ? `+${options.contrast}` : options.contrast}%, threshold ${options.threshold}, gamma ${options.gamma.toFixed(2)}.`,
+      createdAt: Date.now(),
+      algorithm: options.algorithm,
+      brightness: options.brightness,
+      contrast: options.contrast,
+      threshold: options.threshold,
+      gamma: options.gamma,
+      invert: options.invert,
+      tag: 'Custom',
+    };
+    const updated = [newPreset, ...customPresets];
+    setCustomPresets(updated);
+    saveCustomPresetsToStorage(updated);
+    setIsSaving(false);
+    setNewPresetName('');
+    setNewPresetSubject('');
+    setSaveSuccessMsg(`Saved "${newPreset.name}" to localStorage!`);
+    setTimeout(() => {
+      setSaveSuccessMsg(null);
+    }, 3500);
+  };
+
+  const handleDeleteCustomPreset = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = customPresets.filter((p) => p.id !== id);
+    setCustomPresets(updated);
+    saveCustomPresetsToStorage(updated);
+  };
+
+  const handleApplyPreset = (preset: DitheringPreset | CustomDitherPreset) => {
     onChange({
       ...options,
       algorithm: preset.algorithm,
@@ -256,7 +352,7 @@ export const DitherControls: React.FC<DitherControlsProps> = ({
     });
   };
 
-  const activePreset = DITHERING_PRESETS.find(
+  const activeCustomPreset = customPresets.find(
     (p) =>
       p.algorithm === options.algorithm &&
       p.brightness === options.brightness &&
@@ -265,6 +361,18 @@ export const DitherControls: React.FC<DitherControlsProps> = ({
       Math.abs(p.gamma - options.gamma) < 0.01 &&
       p.invert === options.invert
   );
+
+  const activeBuiltinPreset = DITHERING_PRESETS.find(
+    (p) =>
+      p.algorithm === options.algorithm &&
+      p.brightness === options.brightness &&
+      p.contrast === options.contrast &&
+      p.threshold === options.threshold &&
+      Math.abs(p.gamma - options.gamma) < 0.01 &&
+      p.invert === options.invert
+  );
+
+  const activePreset = activeCustomPreset || activeBuiltinPreset;
 
   const currentAlgoA = ALGORITHMS.find((a) => a.id === options.algorithm) || ALGORITHMS[0];
   const currentAlgoB =
@@ -414,87 +522,308 @@ export const DitherControls: React.FC<DitherControlsProps> = ({
               Dithering Presets
             </span>
           </div>
-          <button
-            onClick={handleResetDefaults}
-            className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-amber-400 transition-colors cursor-pointer"
-            title="Reset algorithm, brightness, contrast, and gamma to default neutral baseline"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span>Reset Defaults</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSaving((prev) => !prev)}
+              className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/50 transition-colors cursor-pointer"
+              title="Save current algorithm, brightness, contrast, and curve to browser localStorage"
+            >
+              <BookmarkPlus className="w-3.5 h-3.5 text-amber-400" />
+              <span>Save Current Preset</span>
+            </button>
+            <button
+              onClick={handleResetDefaults}
+              className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-amber-400 transition-colors cursor-pointer"
+              title="Reset algorithm, brightness, contrast, and gamma to default neutral baseline"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset Defaults</span>
+            </button>
+          </div>
         </div>
 
-        {/* Preset Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {DITHERING_PRESETS.map((preset) => {
-            const isActive = activePreset?.id === preset.id;
-            return (
+        {/* Temporary Save Toast Notification */}
+        {saveSuccessMsg && (
+          <div className="px-3 py-1.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-[11px] text-emerald-300 flex items-center justify-between animate-fadeIn">
+            <div className="flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>{saveSuccessMsg}</span>
+            </div>
+            <button
+              onClick={() => setSaveSuccessMsg(null)}
+              className="text-emerald-400 hover:text-emerald-200 ml-2"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Inline Save Current Preset Form */}
+        {isSaving && (
+          <form
+            onSubmit={handleSaveCustomPreset}
+            className="p-3 bg-neutral-900/90 border border-amber-500/50 rounded-lg space-y-2.5 shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <BookmarkPlus className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-semibold text-neutral-100">
+                  Save Custom Calibration to localStorage
+                </span>
+              </div>
               <button
-                key={preset.id}
-                onClick={() => handleApplyPreset(preset)}
-                className={`flex flex-col text-left p-2.5 rounded-lg border transition-all text-xs cursor-pointer ${
-                  isActive
-                    ? 'bg-amber-500/15 border-amber-500/80 text-amber-100 ring-1 ring-amber-500/40 shadow-sm'
-                    : 'bg-neutral-900/60 border-neutral-800 text-neutral-300 hover:bg-neutral-800/80 hover:border-neutral-700'
-                }`}
+                type="button"
+                onClick={() => setIsSaving(false)}
+                className="text-neutral-400 hover:text-neutral-200 transition-colors p-0.5"
+                aria-label="Cancel preset save"
               >
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <span className="font-semibold text-neutral-100 flex items-center gap-1.5">
-                    {preset.name}
-                  </span>
-                  {isActive ? (
-                    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
-                      <Check className="w-3 h-3" />
-                      Active
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-neutral-400 font-mono">
-                      {preset.tag}
-                    </span>
-                  )}
-                </div>
-
-                <div className="text-[11px] text-neutral-400 leading-tight mb-2">
-                  {preset.subject}
-                </div>
-
-                <div className="mt-auto pt-1.5 border-t border-neutral-800/60 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-neutral-400">
-                  <span>
-                    Algo: <strong className="text-neutral-200">{preset.algorithm}</strong>
-                  </span>
-                  <span>
-                    Bright: <strong className="text-neutral-200">{preset.brightness > 0 ? `+${preset.brightness}` : preset.brightness}%</strong>
-                  </span>
-                  <span>
-                    Contrast: <strong className="text-neutral-200">{preset.contrast > 0 ? `+${preset.contrast}` : preset.contrast}%</strong>
-                  </span>
-                </div>
+                <X className="w-4 h-4" />
               </button>
-            );
-          })}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] uppercase font-semibold tracking-wider text-neutral-400 block mb-1">
+                  Preset Name <span className="text-amber-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                  placeholder="e.g. Vintage Newsprint, 8-bit Sprite..."
+                  className="w-full text-xs bg-neutral-950 border border-neutral-700 rounded px-2.5 py-1.5 text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-amber-400"
+                  autoFocus
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase font-semibold tracking-wider text-neutral-400 block mb-1">
+                  Subject / Category (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={newPresetSubject}
+                  onChange={(e) => setNewPresetSubject(e.target.value)}
+                  placeholder="e.g. Logos, Low-Light Scans, Schematics..."
+                  className="w-full text-xs bg-neutral-950 border border-neutral-700 rounded px-2.5 py-1.5 text-neutral-100 placeholder:text-neutral-600 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            </div>
+
+            {/* Current Settings Snapshot */}
+            <div className="p-2 rounded bg-neutral-950 border border-neutral-800 text-[10px] font-mono text-neutral-400 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-neutral-500 font-sans font-medium uppercase text-[9px]">Settings to Save:</span>
+              <span>
+                Algorithm: <strong className="text-amber-300">{options.algorithm}</strong>
+              </span>
+              <span>
+                Brightness: <strong className="text-neutral-200">{options.brightness > 0 ? `+${options.brightness}` : options.brightness}%</strong>
+              </span>
+              <span>
+                Contrast: <strong className="text-neutral-200">{options.contrast > 0 ? `+${options.contrast}` : options.contrast}%</strong>
+              </span>
+              <span>
+                Threshold: <strong className="text-neutral-200">{options.threshold}</strong>
+              </span>
+              <span>
+                Gamma: <strong className="text-neutral-200">{options.gamma.toFixed(2)}</strong>
+              </span>
+              {options.invert && (
+                <span className="text-amber-400 font-bold">Invert: ON</span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1 border-t border-neutral-800/80">
+              <button
+                type="button"
+                onClick={() => setIsSaving(false)}
+                className="px-2.5 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!newPresetName.trim()}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded bg-amber-500 text-neutral-950 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shadow-sm"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Save to localStorage</span>
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Saved Custom Presets Section (Rendered if user has custom presets) */}
+        {customPresets.length > 0 && (
+          <div className="space-y-1.5 pb-2 border-b border-neutral-800/80">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-semibold text-neutral-300 flex items-center gap-1.5">
+                <Bookmark className="w-3 h-3 text-amber-400" />
+                <span>Custom Presets ({customPresets.length})</span>
+              </span>
+              <span className="text-[10px] text-neutral-400">Persisted in browser</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {customPresets.map((preset) => {
+                const isActive = activeCustomPreset?.id === preset.id;
+                return (
+                  <div
+                    key={preset.id}
+                    onClick={() => handleApplyPreset(preset)}
+                    className={`group relative flex flex-col text-left p-2.5 rounded-lg border transition-all text-xs cursor-pointer ${
+                      isActive
+                        ? 'bg-amber-500/15 border-amber-500/80 text-amber-100 ring-1 ring-amber-500/40 shadow-sm'
+                        : 'bg-neutral-900/60 border-neutral-800 text-neutral-300 hover:bg-neutral-800/80 hover:border-neutral-700'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-1 mb-1">
+                      <div className="min-w-0 pr-1">
+                        <span className="font-semibold text-neutral-100 block truncate">
+                          {preset.name}
+                        </span>
+                        <span className="text-[10px] text-neutral-400 block truncate">
+                          {preset.subject || 'Custom profile'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isActive && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-400 bg-amber-500/20 px-1 py-0.5 rounded">
+                            <Check className="w-2.5 h-2.5" />
+                            Active
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteCustomPreset(preset.id, e)}
+                          className="p-1 text-neutral-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
+                          title="Delete custom preset from localStorage"
+                          aria-label={`Delete custom preset ${preset.name}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto pt-1.5 border-t border-neutral-800/60 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-neutral-400">
+                      <span>
+                        Algo: <strong className="text-neutral-200">{preset.algorithm}</strong>
+                      </span>
+                      <span>
+                        Bright: <strong className="text-neutral-200">{preset.brightness > 0 ? `+${preset.brightness}` : preset.brightness}%</strong>
+                      </span>
+                      <span>
+                        Contrast: <strong className="text-neutral-200">{preset.contrast > 0 ? `+${preset.contrast}` : preset.contrast}%</strong>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Built-in Subject Presets Grid */}
+        <div>
+          {customPresets.length > 0 && (
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 mb-1.5">
+              Subject Baselines
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {DITHERING_PRESETS.map((preset) => {
+              const isActive = activeBuiltinPreset?.id === preset.id && !activeCustomPreset;
+              return (
+                <button
+                  key={preset.id}
+                  onClick={() => handleApplyPreset(preset)}
+                  className={`flex flex-col text-left p-2.5 rounded-lg border transition-all text-xs cursor-pointer ${
+                    isActive
+                      ? 'bg-amber-500/15 border-amber-500/80 text-amber-100 ring-1 ring-amber-500/40 shadow-sm'
+                      : 'bg-neutral-900/60 border-neutral-800 text-neutral-300 hover:bg-neutral-800/80 hover:border-neutral-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="font-semibold text-neutral-100 flex items-center gap-1.5">
+                      {preset.name}
+                    </span>
+                    {isActive ? (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                        <Check className="w-3 h-3" />
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-neutral-400 font-mono">
+                        {preset.tag}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-[11px] text-neutral-400 leading-tight mb-2">
+                    {preset.subject}
+                  </div>
+
+                  <div className="mt-auto pt-1.5 border-t border-neutral-800/60 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-neutral-400">
+                    <span>
+                      Algo: <strong className="text-neutral-200">{preset.algorithm}</strong>
+                    </span>
+                    <span>
+                      Bright: <strong className="text-neutral-200">{preset.brightness > 0 ? `+${preset.brightness}` : preset.brightness}%</strong>
+                    </span>
+                    <span>
+                      Contrast: <strong className="text-neutral-200">{preset.contrast > 0 ? `+${preset.contrast}` : preset.contrast}%</strong>
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Active Preset Context Callout */}
-        {activePreset ? (
+        {activeCustomPreset ? (
+          <div className="p-2.5 rounded bg-neutral-900/80 border border-amber-500/30 text-[11px] text-neutral-300 flex items-start gap-2">
+            <Bookmark className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <span className="text-amber-400 font-semibold">{activeCustomPreset.name}:</span>{' '}
+              Custom preset applied from localStorage. Calibrated for {activeCustomPreset.subject}.{' '}
+              <span className="text-neutral-400 block sm:inline">
+                (You can fine-tune using the calibration sliders below).
+              </span>
+            </div>
+          </div>
+        ) : activeBuiltinPreset ? (
           <div className="p-2.5 rounded bg-neutral-900/80 border border-neutral-800 text-[11px] text-neutral-300 flex items-start gap-2">
             <Info className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
             <div>
-              <span className="text-amber-400 font-semibold">{activePreset.name}:</span>{' '}
-              {activePreset.description}{' '}
+              <span className="text-amber-400 font-semibold">{activeBuiltinPreset.name}:</span>{' '}
+              {activeBuiltinPreset.description}{' '}
               <span className="text-neutral-400 block sm:inline">
                 (You can further fine-tune the calibration sliders below).
               </span>
             </div>
           </div>
         ) : (
-          <div className="px-2.5 py-1.5 rounded bg-neutral-900/40 border border-neutral-800/70 text-[11px] text-neutral-400 flex items-center justify-between">
+          <div className="px-2.5 py-1.5 rounded bg-neutral-900/40 border border-neutral-800/70 text-[11px] text-neutral-400 flex flex-wrap items-center justify-between gap-1.5">
             <span>Custom calibration active (manual adjustments).</span>
-            <button
-              onClick={handleResetDefaults}
-              className="text-amber-400 hover:underline text-[10px] cursor-pointer"
-            >
-              Reset to baseline
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsSaving(true)}
+                className="text-amber-400 hover:text-amber-300 hover:underline text-[11px] font-medium cursor-pointer flex items-center gap-1"
+              >
+                <BookmarkPlus className="w-3 h-3" />
+                <span>Save Current Preset</span>
+              </button>
+              <span className="text-neutral-600">|</span>
+              <button
+                type="button"
+                onClick={handleResetDefaults}
+                className="text-neutral-400 hover:text-neutral-200 text-[10px] cursor-pointer"
+              >
+                Reset to baseline
+              </button>
+            </div>
           </div>
         )}
       </div>
