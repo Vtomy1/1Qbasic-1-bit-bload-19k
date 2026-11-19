@@ -19,7 +19,7 @@ import {
 } from './types';
 import { convertTo1Bit, renderImageToCanvas } from './utils/dithering';
 import { downloadBinaryFile } from './utils/bsave';
-import { sanitizeDosFilename, processBatchImageFile } from './utils/batchZip';
+import { sanitizeDosFilename } from './utils/batchZip';
 import { SAMPLE_IMAGES } from './utils/sampleImages';
 import { Monitor, Binary, FileCode, Layers, Sliders, Check, Palette, Archive } from 'lucide-react';
 
@@ -111,52 +111,22 @@ export default function App() {
     setTimeout(() => setDownloadSuccessNotice(false), 3000);
   }, [conversionResult, imageName]);
 
-  const handleBatchAddFiles = async (files: File[]) => {
+  const handleBatchAddFiles = (files: File[]) => {
     setActiveTab('batch-zip');
-    const existingNames = new Set(batchItems.map((i) => i.bsvFilename));
-    const newItems: BatchItem[] = files.map((file, idx) => ({
-      id: `${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
-      file,
-      name: file.name,
-      bsvFilename: sanitizeDosFilename(file.name, existingNames),
-      originalWidth: 0,
-      originalHeight: 0,
-      status: 'pending',
-    }));
-
-    const combined = [...batchItems, ...newItems];
-    setBatchItems(combined);
-
-    for (const item of newItems) {
-      setBatchItems((prev) =>
-        prev.map((it) => (it.id === item.id ? { ...it, status: 'processing' } : it))
-      );
-      try {
-        const resultData = await processBatchImageFile(item.file, options);
-        setBatchItems((prev) =>
-          prev.map((it) =>
-            it.id === item.id
-              ? {
-                  ...it,
-                  originalWidth: resultData.originalWidth,
-                  originalHeight: resultData.originalHeight,
-                  result: resultData.result,
-                  thumbnailUrl: resultData.thumbnailUrl,
-                  status: 'ready',
-                }
-              : it
-          )
-        );
-      } catch (err: any) {
-        setBatchItems((prev) =>
-          prev.map((it) =>
-            it.id === item.id
-              ? { ...it, status: 'error', errorMessage: err?.message || 'Failed' }
-              : it
-          )
-        );
-      }
-    }
+    setBatchItems((prev) => {
+      const existingNames = new Set(prev.map((i) => i.bsvFilename));
+      const newItems: BatchItem[] = files.map((file, idx) => ({
+        id: `${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+        file,
+        name: file.name,
+        bsvFilename: sanitizeDosFilename(file.name, existingNames),
+        originalWidth: 0,
+        originalHeight: 0,
+        status: 'pending',
+        sourcePreviewUrl: URL.createObjectURL(file),
+      }));
+      return [...prev, ...newItems];
+    });
   };
 
   const handlePreviewBatchItemInCrt = (item: BatchItem) => {

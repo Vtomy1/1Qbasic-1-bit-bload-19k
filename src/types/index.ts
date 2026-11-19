@@ -75,5 +75,6 @@ export interface BatchItem {
   status: 'pending' | 'processing' | 'ready' | 'error';
   result?: ConversionResult;
   thumbnailUrl?: string;
+  sourcePreviewUrl?: string;
   errorMessage?: string;
 }
